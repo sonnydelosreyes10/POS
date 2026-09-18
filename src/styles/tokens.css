@@ -1,0 +1,67 @@
+/* Design tokens — README "Addendum v2 · Theming". Keep the names; components never hold a literal hex. */
+:root {
+  color-scheme: light;
+  --font-sans: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  --ground: #F5F6F3; --surface: #FFFFFF; --raised: #FBFCFA; --sunken: #F7F8F5;
+  --sunken2: #EFF1EC; --well: #F0F2ED; --tile-hover: #F7FAFE;
+  --panel-dark: #131816; --panel-deep: #0D1210; --dark-hover: #18211D;
+  --btn-solid: #131816; --btn-solid-ink: #FBFCFA;
+  --border-strong: #E4E7E1; --border: #ECEEE8; --border-soft: #E7EAE4; --border-row: #EFF1EC;
+  --border-input: #DADED6; --border-input2: #DDE1D9; --border-dark: #2A312E; --rule: #C7CDC8;
+  --ink: #131816; --ink2: #4C554F; --ink3: #666F69; --ink4: #6E7873; --ink5: #717B76;
+  --ink6: #838C87; --ink7: #616A65; --ink-nav: #5C655F; --on-dark: #F5F6F3; --on-accent: #FFFFFF;
+  --accent: #1D5FBF; --accent-ink: #1A55AC; --accent-hover: #17499A; --accent-bright: #2C79E0;
+  --accent-wash: #EAF1FB; --accent-wash-border: #CFDFF6; --accent-ring: rgba(29,95,191,0.16);
+  --success-dot: #17A06B;
+  --danger: #BE4234; --danger-ink: #BE4234; --danger-wash: #FCF0EE;
+  --danger-border: #F0D6D1; --danger-border2: #EDD6D1; --danger-border-dark: #5C332B;
+  --danger-on-dark: #EDA79B;
+  --warn-ink: #B4820F; --warn-wash: #FAF3E1; --warn-chip-ink: #8A6913;
+  --chip-violet-bg: #F1EEF8; --chip-violet-ink: #5A4E86;
+  --chip-info-bg: #EDF3F8; --chip-info-ink: #31607F;
+  /* TRANSFER_IN / TRANSFER_OUT pair (not assigned in the handoff) */
+  --chip-teal-bg: #E9F5F3; --chip-teal-ink: #2B6A61;
+  --selection: #D3E4FA; --chrome: rgba(255,255,255,0.86); --scrim: rgba(13,18,16,0.48);
+  --shadow-1: 0 1px 1px rgba(19,24,22,0.03), 0 6px 18px -12px rgba(19,24,22,0.10);
+  --shadow-2: 0 1px 1px rgba(19,24,22,0.03), 0 18px 48px -24px rgba(19,24,22,0.16);
+  --shadow-modal: 0 30px 70px -20px rgba(13,18,16,0.42);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0B0F0E; --surface: #141A18; --raised: #181F1C; --sunken: #111715;
+  --sunken2: #1C2320; --well: #1C2320; --tile-hover: #141E2C;
+  --panel-dark: #1B2320; --panel-deep: #0E1412; --dark-hover: #232B27;
+  --btn-solid: #2C352F; --btn-solid-ink: #EDF0ED;
+  --border-strong: #262D2A; --border: #1F2522; --border-soft: #232A27; --border-row: #1E2421;
+  --border-input: #2E3631; --border-input2: #323A35; --border-dark: #333B37; --rule: #39413C;
+  --ink: #EDF0ED; --ink2: #C3CBC6; --ink3: #A5ADA8; --ink4: #8C948F; --ink5: #8A928D;
+  --ink6: #8A928D; --ink7: #99A19C; --ink-nav: #A5ADA8; --on-dark: #EDF0ED; --on-accent: #FFFFFF;
+  --accent: #1F63C7; --accent-ink: #7FB4F5; --accent-hover: #2A75DE; --accent-bright: #3B87EC;
+  --accent-wash: #11213A; --accent-wash-border: #1F3C63; --accent-ring: rgba(59,135,236,0.24);
+  --success-dot: #2ED39A;
+  --danger: #C74E3F; --danger-ink: #F09184; --danger-wash: #2B1613;
+  --danger-border: #4C241E; --danger-border2: #4C241E; --danger-border-dark: #5C332B;
+  --danger-on-dark: #EDA79B;
+  --warn-ink: #E0AE43; --warn-wash: #271D0B; --warn-chip-ink: #E5BA5A;
+  --chip-violet-bg: #1D1A2B; --chip-violet-ink: #B3A8E0;
+  --chip-info-bg: #101F29; --chip-info-ink: #8FC0E0;
+  --chip-teal-bg: #0F2421; --chip-teal-ink: #8ED1C6;
+  --selection: #1F3C63; --chrome: rgba(16,21,19,0.82); --scrim: rgba(4,7,6,0.62);
+  --shadow-1: 0 1px 1px rgba(0,0,0,0.30), 0 6px 18px -12px rgba(0,0,0,0.55);
+  --shadow-2: 0 1px 1px rgba(0,0,0,0.30), 0 18px 48px -24px rgba(0,0,0,0.70);
+  --shadow-modal: 0 30px 70px -20px rgba(0,0,0,0.78);
+}
+
+/* Receipts and reports always print light, regardless of theme. */
+@media print {
+  html, html[data-theme="dark"] {
+    color-scheme: light;
+    --ground: #FFFFFF; --surface: #FFFFFF; --raised: #FFFFFF; --sunken: #FFFFFF;
+    --ink: #000000; --ink2: #222222; --ink3: #333333; --ink4: #444444; --ink5: #444444;
+    --border: #CCCCCC; --border-strong: #CCCCCC; --rule: #888888;
+    --shadow-1: none; --shadow-2: none;
+  }
+}
