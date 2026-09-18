@@ -69,6 +69,7 @@ type Action =
   | { type: 'returnSale'; receiptNo: string; reason: string; lines: { productId: number; qty: number }[] }
   | { type: 'receive'; sku: string; qty: number; unitCost: number; newAvg: number; doc: string }
   | { type: 'saveProduct'; product: Product }
+  | { type: 'addProduct'; product: Product }
   | { type: 'saveSettings'; settings: Settings };
 
 const initial: State = {
@@ -193,6 +194,7 @@ function reducer(s: State, a: Action): State {
       };
     }
     case 'saveProduct': return { ...s, catalog: s.catalog.map((p) => (p.id === a.product.id ? a.product : p)) };
+    case 'addProduct': return { ...s, catalog: [...s.catalog, a.product] };
     case 'saveSettings': return { ...s, settings: a.settings };
   }
 }

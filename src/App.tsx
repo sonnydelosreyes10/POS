@@ -14,6 +14,7 @@ import { AdjustStockScreen } from './screens/backoffice/AdjustStockScreen';
 import { PurchasingScreen } from './screens/backoffice/PurchasingScreen';
 import { ReportsScreen } from './screens/backoffice/ReportsScreen';
 import { MaintenanceScreen } from './screens/backoffice/MaintenanceScreen';
+import { AdminScreen } from './screens/backoffice/AdminScreen';
 
 /** Cashier cannot reach the sales screen without signing in and opening a shift — FR-SHF-01. */
 function RequireShift() {
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="purchasing" element={<PurchasingScreen />} />
           <Route path="reports" element={<ReportsScreen />} />
           <Route path="maintenance" element={<MaintenanceScreen />} />
+          <Route path="users" element={<AdminScreen />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Route>

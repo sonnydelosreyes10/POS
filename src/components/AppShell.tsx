@@ -12,6 +12,7 @@ const NAV = [
   { to: '/admin/purchasing', label: 'PO & receiving' },
   { to: '/admin/reports', label: 'Reports' },
   { to: '/admin/maintenance', label: 'Maintenance' },
+  { to: '/admin/users', label: 'Admin' },
 ];
 
 export function AppShell() {

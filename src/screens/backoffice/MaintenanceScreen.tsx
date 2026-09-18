@@ -1,21 +1,17 @@
 import { useState } from 'react';
 import { useStore, type Settings } from '../../app/store';
-import { CATEGORIES, type Category } from '../../data/catalog';
-import { AUDIT_ROWS, BACKUP_ROWS, ROLE_PERMS, SUPPLIERS, TERMINALS, USERS } from '../../data/store';
+import { CATEGORIES, type Category, type Product } from '../../data/catalog';
+import { AUDIT_ROWS, BACKUP_ROWS, SUPPLIERS, TERMINALS } from '../../data/store';
 import { fmt, parseAmount } from '../../domain/money';
 import { Notice, Pills, SpecOnly } from '../../components/ui';
 import { CURRENCY } from '../../app/config';
 
 const TABS = [
   { value: 'items', label: 'Item maintenance' },
-  { value: 'users', label: 'Users & roles' },
   { value: 'settings', label: 'Store settings' },
   { value: 'devices', label: 'Terminals & suppliers' },
   { value: 'backup', label: 'Backup & audit' },
 ];
-
-const ROLE_TONE: Record<string, string> = { Owner: 'tone-violet', Manager: 'tone-accent', Cashier: 'tone-neutral', 'Stock clerk': 'tone-info', 'Read-only': 'tone-warn' };
-const STATUS_COLOR: Record<string, string> = { Active: 'var(--accent-ink)', Locked: 'var(--danger-ink)', Disabled: 'var(--ink5)' };
 
 /** Maintenance — spec 9.2, 10.2. Owner and manager only (enforce server-side, NFR-04). */
 export function MaintenanceScreen() {
@@ -28,13 +24,12 @@ export function MaintenanceScreen() {
         <div>
           <div className="eyebrow">administration<SpecOnly> · 9.2, 10.2</SpecOnly></div>
           <h2 className="h-screen">Maintenance</h2>
-          <div className="lede">Owner and manager only. Every change on this page is written to the audit log with the acting user.</div>
+          <div className="lede">Owner and manager only. Every change on this page is written to the audit log with the acting user. User accounts and roles are managed on the Admin page.</div>
         </div>
         <Pills label="Section" options={TABS} value={tab} onChange={(t) => { setTab(t); setNotice(''); }} />
         {notice && <Notice onDismiss={() => setNotice('')}>{notice}</Notice>}
       </section>
       {tab === 'items' && <ItemsTab onNotice={setNotice} />}
-      {tab === 'users' && <UsersTab onNotice={setNotice} />}
       {tab === 'settings' && <SettingsTab onNotice={setNotice} />}
       {tab === 'devices' && <DevicesTab />}
       {tab === 'backup' && <BackupTab onNotice={setNotice} />}
@@ -42,35 +37,85 @@ export function MaintenanceScreen() {
   );
 }
 
-type Draft = { name: string; barcode: string; unit: string; price: string; reorder: string; max: string; category: Category };
+type TaxOption = 'VATable' | 'VAT-exempt';
+type Draft = {
+  sku: string; name: string; barcode: string; unit: string; price: string; reorder: string; max: string;
+  category: Category; stock: string; avgCost: string; vatExempt: TaxOption;
+};
+
+const emptyDraft = (): Draft => ({
+  sku: '', name: '', barcode: '', unit: 'pc', price: '', reorder: '', max: '',
+  category: CATEGORIES[0], stock: '', avgCost: '', vatExempt: 'VATable',
+});
+
+const draftOf = (x: Product): Draft => ({
+  sku: x.sku, name: x.name, barcode: x.barcode, unit: x.unit, price: x.price.toFixed(2),
+  reorder: String(x.reorder), max: String(x.max), category: x.category,
+  stock: String(x.stock), avgCost: x.avgCost.toFixed(2), vatExempt: x.vatExempt ? 'VAT-exempt' : 'VATable',
+});
 
 function ItemsTab({ onNotice }: { onNotice: (s: string) => void }) {
   const { state, dispatch } = useStore();
-  const [sku, setSku] = useState(state.catalog[0].sku);
-  const p = state.catalog.find((x) => x.sku === sku)!;
-  const base = (): Draft => ({ name: p.name, barcode: p.barcode, unit: p.unit, price: p.price.toFixed(2), reorder: String(p.reorder), max: String(p.max), category: p.category });
+  const [sku, setSku] = useState<string>(state.catalog[0].sku);
+  const p = sku === '' ? undefined : state.catalog.find((x) => x.sku === sku);
+  const base = (): Draft => (p ? draftOf(p) : emptyDraft());
   const [draft, setDraft] = useState<Draft>(base);
   const [error, setError] = useState('');
-  const dirty = JSON.stringify(draft) !== JSON.stringify(base());
+  const dirty = !!p && JSON.stringify(draft) !== JSON.stringify(base());
+  const newHasInput = !p && (draft.sku.trim() || draft.name.trim() || draft.barcode.trim() || draft.price.trim());
 
   const pick = (s: string) => {
+    if ((dirty || newHasInput) && !window.confirm('Discard unsaved changes to this item?')) return;
     const np = state.catalog.find((x) => x.sku === s)!;
     setSku(s);
-    setDraft({ name: np.name, barcode: np.barcode, unit: np.unit, price: np.price.toFixed(2), reorder: String(np.reorder), max: String(np.max), category: np.category });
+    setDraft(draftOf(np));
+    setError('');
+  };
+
+  const startNew = () => {
+    if (dirty && !window.confirm('Discard unsaved changes to this item?')) return;
+    setSku('');
+    setDraft(emptyDraft());
     setError('');
   };
 
   const price = parseAmount(draft.price);
   const net = price / (1 + state.settings.vatRate);
-  const margin = price > 0 ? (((net - p.avgCost) / net) * 100).toFixed(1) + '%' : '—';
+  const margin = p && price > 0 ? (((net - p.avgCost) / net) * 100).toFixed(1) + '%' : '—';
 
   const save = () => {
     const reorder = parseInt(draft.reorder, 10), max = parseInt(draft.max, 10);
+    const newSku = draft.sku.trim();
+    if (!p) {
+      if (!newSku) return setError('SKU is required.');
+      if (state.catalog.some((x) => x.sku === newSku)) return setError('SKU already exists.');
+    }
     if (!draft.name.trim()) return setError('Item name is required.');
     if (!(price > 0)) return setError('Selling price must be greater than zero.');
     if (!(reorder >= 0) || !(max > 0) || reorder > max) return setError('Reorder and maximum level are required, and reorder cannot exceed maximum.');
     if (state.catalog.some((x) => x.sku !== sku && x.barcode === draft.barcode.trim())) return setError('Barcode must be unique.');
-    dispatch({ type: 'saveProduct', product: { ...p, name: draft.name.trim(), barcode: draft.barcode.trim(), unit: draft.unit.trim(), price, reorder, max, category: draft.category } });
+
+    if (!p) {
+      const stock = parseInt(draft.stock, 10);
+      const avgCost = parseAmount(draft.avgCost);
+      if (!(stock >= 0)) return setError('Opening stock is required and cannot be negative.');
+      if (!(avgCost >= 0)) return setError('Initial unit cost is required and cannot be negative.');
+      const id = Math.max(0, ...state.catalog.map((x) => x.id)) + 1;
+      const created: Product = {
+        id, sku: newSku, barcode: draft.barcode.trim(), name: draft.name.trim(), category: draft.category,
+        price, unit: draft.unit.trim() || 'pc', stock, vatExempt: draft.vatExempt === 'VAT-exempt', avgCost, reorder, max,
+      };
+      dispatch({ type: 'addProduct', product: created });
+      setSku(created.sku);
+      setDraft(draftOf(created));
+      setError('');
+      onNotice(`Item added · ${created.sku} written to the audit log.`);
+      return;
+    }
+
+    const saved = { ...p, name: draft.name.trim(), barcode: draft.barcode.trim(), unit: draft.unit.trim(), price, reorder, max, category: draft.category };
+    dispatch({ type: 'saveProduct', product: saved });
+    setDraft(draftOf(saved));
     setError('');
     onNotice(price !== p.price
       ? `Item saved · PRICE_CHANGE ${sku} ${fmt(p.price)} → ${fmt(price)} written to the audit log; terminals pick it up on next sync.`
@@ -78,101 +123,82 @@ function ItemsTab({ onNotice }: { onNotice: (s: string) => void }) {
   };
 
   const fields: { key: keyof Draft; label: string; mono?: boolean; wide?: boolean; mode?: 'decimal' | 'numeric' }[] = [
+    ...(p ? [] : [{ key: 'sku' as const, label: 'SKU', mono: true }]),
     { key: 'name', label: 'Item name', wide: true },
     { key: 'barcode', label: 'Barcode', mono: true, mode: 'numeric' },
     { key: 'unit', label: 'Unit' },
     { key: 'price', label: 'Selling price, VAT-inclusive', mono: true, mode: 'decimal' },
     { key: 'reorder', label: 'Reorder level', mono: true, mode: 'numeric' },
     { key: 'max', label: 'Maximum level', mono: true, mode: 'numeric' },
+    ...(p ? [] : [
+      { key: 'stock' as const, label: 'Opening stock', mono: true, mode: 'numeric' as const },
+      { key: 'avgCost' as const, label: 'Initial unit cost', mono: true, mode: 'decimal' as const },
+    ]),
   ];
 
   return (
     <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
       <section className="card" style={{ padding: 24 }}>
         <div className="card-head" style={{ padding: 0, border: 'none', marginBottom: 16 }}>
-          <span className="h-section">Edit item</span>
-          <span className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{sku}<SpecOnly> · FR-INV-05</SpecOnly></span>
+          <span className="h-section">{p ? 'Edit item' : 'New item'}</span>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{p ? sku : 'not yet saved'}<SpecOnly> · FR-INV-05</SpecOnly></span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
           {fields.map((f) => (
             <div key={f.key} style={f.wide ? { gridColumn: '1 / -1' } : undefined}>
               <label className="field-label" htmlFor={`f-${f.key}`}>{f.label}</label>
-              <input id={`f-${f.key}`} className={'input' + (f.mono ? ' mono' : '')} inputMode={f.mode} value={draft[f.key]}
+              <input id={`f-${f.key}`} className={'input' + (f.mono ? ' mono' : '')} inputMode={f.mode} value={draft[f.key] as string}
                 onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))} />
             </div>
           ))}
         </div>
         <span className="field-label" style={{ margin: '16px 0 8px' }}>Category</span>
         <Pills label="Category" options={CATEGORIES} value={draft.category} onChange={(c) => setDraft((d) => ({ ...d, category: c }))} />
+        {!p && (
+          <>
+            <span className="field-label" style={{ margin: '16px 0 8px' }}>Tax</span>
+            <Pills label="Tax" options={['VATable', 'VAT-exempt'] as const} value={draft.vatExempt} onChange={(v) => setDraft((d) => ({ ...d, vatExempt: v }))} />
+          </>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginTop: 22 }}>
-          <button type="button" className="btn" style={{ padding: 14 }} onClick={() => { setDraft(base()); setError(''); }} disabled={!dirty}>Revert</button>
-          <button type="button" className="btn btn-primary" style={{ padding: 14, fontSize: 14 }} onClick={save} disabled={!dirty}>Save item</button>
+          <button type="button" className="btn" style={{ padding: 14 }} onClick={() => { setDraft(base()); setError(''); }} disabled={!!p && !dirty}>Revert</button>
+          <button type="button" className="btn btn-primary" style={{ padding: 14, fontSize: 14 }} onClick={save} disabled={!!p && !dirty}>{p ? 'Save item' : 'Create item'}</button>
         </div>
-        <button type="button" className="btn btn-danger btn-block" style={{ marginTop: 10 }}
-          onClick={() => onNotice('Items are archived, never deleted — history and past receipts must keep resolving. An archived item stops appearing in search and on the product grid.')}>Archive item</button>
+        {p && (
+          <button type="button" className="btn btn-danger btn-block" style={{ marginTop: 10 }}
+            onClick={() => onNotice('Items are archived, never deleted — history and past receipts must keep resolving. An archived item stops appearing in search and on the product grid.')}>Archive item</button>
+        )}
         {error && <div className="alert alert-danger" style={{ marginTop: 14 }} role="alert">{error}</div>}
-        {dirty && !error && <div className="alert alert-warn" style={{ marginTop: 14, padding: '10px 12px', borderRadius: 12 }}>Unsaved changes. Prices take effect only after saving, and never mid-transaction on a terminal.</div>}
+        {p && dirty && !error && <div className="alert alert-warn" style={{ marginTop: 14, padding: '10px 12px', borderRadius: 12 }}>Unsaved changes. Prices take effect only after saving, and never mid-transaction on a terminal.</div>}
       </section>
 
       <div className="stack">
         <section className="card" style={{ padding: 24 }}>
           <div className="h-section" style={{ marginBottom: 14 }}>Derived</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 16 }}>
-            <div><div className="figure-label">On hand</div><div className="figure">{p.stock}</div></div>
-            <div><div className="figure-label">Avg cost</div><div className="figure">{fmt(p.avgCost)}</div></div>
-            <div><div className="figure-label">Gross margin</div><div className="figure" style={{ color: 'var(--accent-ink)' }}>{margin}</div></div>
-            <div><div className="figure-label">Tax</div><div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>{p.vatExempt ? 'VAT-exempt' : 'VATable'}</div></div>
-          </div>
-          <div style={{ marginTop: 16, fontSize: 13, color: 'var(--ink3)', lineHeight: 1.6 }}>On hand and average cost are not editable here. They move only through sales, receipts, counts and adjustments. Margin is computed on the VAT-exclusive price.</div>
+          {p ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 16 }}>
+                <div><div className="figure-label">On hand</div><div className="figure">{p.stock}</div></div>
+                <div><div className="figure-label">Avg cost</div><div className="figure">{fmt(p.avgCost)}</div></div>
+                <div><div className="figure-label">Gross margin</div><div className="figure" style={{ color: 'var(--accent-ink)' }}>{margin}</div></div>
+                <div><div className="figure-label">Tax</div><div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>{p.vatExempt ? 'VAT-exempt' : 'VATable'}</div></div>
+              </div>
+              <div style={{ marginTop: 16, fontSize: 13, color: 'var(--ink3)', lineHeight: 1.6 }}>On hand and average cost are not editable here. They move only through sales, receipts, counts and adjustments. Margin is computed on the VAT-exclusive price.</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--ink3)', lineHeight: 1.6 }}>On hand and average cost start from the opening stock and initial unit cost you set on the left. Once created, they move only through sales, receipts, counts and adjustments — the same as any other item.</div>
+          )}
         </section>
         <section className="card card--flush">
-          <div className="card-head" style={{ padding: '20px 24px 14px' }}><span className="h-section">Pick an item</span></div>
+          <div className="card-head" style={{ padding: '20px 24px 14px' }}>
+            <span className="h-section">Pick an item</span>
+            {p && <button type="button" className="btn btn-sm" onClick={startNew}>+ Add item</button>}
+          </div>
           <div style={{ padding: '16px 24px 20px' }}>
             <Pills label="Item" options={state.catalog.map((x) => ({ value: x.sku, label: x.name }))} value={sku} onChange={pick} />
           </div>
         </section>
       </div>
-    </div>
-  );
-}
-
-function UsersTab({ onNotice }: { onNotice: (s: string) => void }) {
-  const [users, setUsers] = useState(USERS.map((u) => ({ ...u })) as { name: string; username: string; role: string; status: string; last: string }[]);
-  const act = (username: string) => {
-    setUsers((list) => list.map((u) => {
-      if (u.username !== username) return u;
-      const status = u.status === 'Active' ? 'Disabled' : 'Active';
-      onNotice(`${u.username}: ${u.status} → ${status}. Written to the audit log with the acting user.`);
-      return { ...u, status };
-    }));
-  };
-  return (
-    <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
-      <section className="card card--flush">
-        <div className="card-head"><span className="h-section">Users</span><span className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>{users.length} accounts<SpecOnly> · FR-AUTH-04</SpecOnly></span></div>
-        {users.map((u) => (
-          <div key={u.username} className="trow" style={{ gridTemplateColumns: 'minmax(0, 1fr) 118px 88px', padding: '14px 24px' }}>
-            <div className="min0"><div className="name">{u.name}</div><div className="meta" style={{ fontSize: 11.5 }}>{u.username} · last in {u.last}</div></div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
-              <span className={`badge ${ROLE_TONE[u.role]}`}>{u.role}</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: STATUS_COLOR[u.status] }}>{u.status}</span>
-            </div>
-            <button type="button" className="btn btn-sm" style={{ padding: '9px 12px' }} onClick={() => act(u.username)}>
-              {u.status === 'Locked' ? 'Unlock' : u.status === 'Disabled' ? 'Enable' : 'Disable'}
-            </button>
-          </div>
-        ))}
-      </section>
-      <section className="card card--flush">
-        <div className="card-head"><span className="h-section">Roles</span><span className="mono" style={{ fontSize: 11, color: 'var(--ink4)' }}>permission matrix<SpecOnly> · 9.2</SpecOnly></span></div>
-        {ROLE_PERMS.map(([role, scope]) => (
-          <div key={role} style={{ padding: '15px 24px', borderBottom: '1px solid var(--border-row)' }}>
-            <div className="name">{role}</div>
-            <div style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 3, lineHeight: 1.5 }}>{scope}</div>
-          </div>
-        ))}
-        <div className="card-foot">Permissions are checked on the server on every request, not just hidden in the interface.</div>
-      </section>
     </div>
   );
 }
